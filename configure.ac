@@ -11,6 +11,7 @@ AC_CONFIG_FILES([
   src/ultra-sdk/Makefile
   src/ultra-sdk-posix/Makefile
   src/ultra-sdk-img/Makefile
+  src/ultra-sdk-sheet/Makefile
   src/ultra-sdk-tileset/Makefile
   src/ultra-sdk-world/Makefile
   ultra240-sdk.pc

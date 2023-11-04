@@ -1,5 +1,5 @@
 /**
- * Converts a PNG image file to an ARGB BMP.
+ * Converts a PNG image file to an RGBA BMP.
  * With an optional tileset file, will produce an image without the margin and
  * spacing of its input.
  */
@@ -15,7 +15,6 @@ static void print_usage(const char* self, std::ostream& out) {
 }
 
 int main(int argc, const char* argv[]) {
-  const char* out_fname = argv[2];
   // Check for help option.
   for (int i = 0; i < argc; i++) {
     std::string arg(argv[i]);
@@ -28,6 +27,7 @@ int main(int argc, const char* argv[]) {
     print_usage(argv[0], std::cerr);
     return 1;
   }
+  const char* out_fname = argv[2];
   png::image<png::rgba_pixel> in(argv[1]);
   std::shared_ptr<ultra::sdk::Tileset> tileset;
   int width = in.get_width();

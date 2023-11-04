@@ -2,6 +2,7 @@ SUBDIRS = \
 	src/ultra-sdk \
 	src/ultra-sdk-posix \
 	src/ultra-sdk-img \
+	src/ultra-sdk-sheet \
 	src/ultra-sdk-tileset \
 	src/ultra-sdk-world
 

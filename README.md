@@ -59,9 +59,13 @@ See the [tileset readme](src/ultra-sdk-tileset/README.md) for specification.
 
 ### ultra-sdk-img
 
-Converts a PNG image file to an ARGB BMP.
+Converts a PNG image file to an RGBA BMP.
 With an optional tileset file, will produce an image without the margin and
 spacing of its input.
+
+### ultra-sdk-sheet
+
+Generate 16 x 16 tiled sprite sheet with every cell labeled with a tile id.
 
 ### ultra-sdk-world
 
