@@ -83,18 +83,26 @@ source directory. Most importanly, it contains:
   tileset may appear in the list of entity tileset offsets, however, the tiles'
   tileset indices may differ between map and entity layers.
 
-## Boundary format.
+## Boundary format
 
+* One char are the flags for this boundary.
 * One short is the number of lines comprising this boundary (_BLn_).
 * Next _BLn_ * 8 bytes are the points comprising the boundary lines.
 
-## Boundary point format.
+## Boundary flags
+
+| Value | Name   | Description                                                 |
+| ----- | ------ | ----------------------------------------------------------- |
+| 0x40  | OneWay | Collision is checked when the dot product of the entity's   |
+|       |        | direction vector and the boundary's normal is positive.     |
+|       |        | This results in entities passing through the boundary in    |
+|       |        | one direction, but colliding with the other.                |
+
+## Boundary point format
 
 * Two signed words represent the x and y values of the point in pixels.
 
 ### Additional notes on boundaries
 
-* Boundaries are always closed.
 * Each point in the list of points comprising the boundary lines is connected
   to the next point in the list.
-* The last point in the list is connected to the first point in the list.

@@ -65,6 +65,13 @@ struct Point {
   int32_t y;
 };
 
+template<template<typename> typename T>
+class Boundary : public T<Point> {
+public:
+  Boundary() : flags(0) {}
+  uint8_t flags;
+};
+
 static long gcd(long a, long b) {
   if (a == 0) {
     return b;
@@ -719,11 +726,13 @@ static void write_map(
 }
 
 static void write_boundary(
-  const std::list<Point>& boundary,
+  const Boundary<std::list>& boundary,
   uint8_t* buf,
   size_t* buf_size
 ) {
   uint8_t* p = buf;
+  uint8_t* flags = reinterpret_cast<uint8_t*>(p);
+  p += sizeof(uint8_t);
   uint16_t* BLn = reinterpret_cast<uint16_t*>(p);
   p += sizeof(uint16_t);
   std::queue<std::pair<int32_t*, int32_t*>> points;
@@ -735,6 +744,7 @@ static void write_boundary(
     points.push(std::make_pair(x, y));
   }
   if (buf != nullptr) {
+    *flags = boundary.flags;
     *BLn = boundary.size();
     for (const auto& point : boundary) {
       auto ptrs = points.front();
@@ -750,7 +760,7 @@ static void write_boundary(
 
 static void write_world(
   const std::vector<Map>& maps,
-  const std::list<std::list<Point>>& bounds,
+  const std::list<Boundary<std::list>>& bounds,
   uint8_t* buf,
   size_t* buf_size
 ) {
@@ -808,51 +818,14 @@ static void write_world(
 }
 
 enum BoundsTile {
-  Empty = 0x00,
-  Slope = 0x01,
-  Down  = 0x03,
-  Ceil  = 0x04,
-  Half  = 0x08,
-  Tall  = 0x11,
-  Solid = 0x20,
-};
-
-const static std::vector<uint8_t> tiles = {
-  Empty,
-  Solid,
-  Slope,
-  Slope | Down,
-  Slope | Down | Ceil,
-  Slope | Ceil,
-  Slope | Half,
-  Slope | Half | Tall,
-  Slope | Half | Tall | Down,
-  Slope | Half | Down,
-  Slope | Half | Ceil,
-  Slope | Half | Ceil | Tall,
-  Slope | Half | Ceil | Tall | Down,
-  Slope | Half | Ceil | Down,
-  Half,
-  Half | Ceil,
-};
-
-const static std::unordered_map<uint8_t, std::string> tile_names = {
-  {Empty, "Empty"},
-  {Solid, "Solid"},
-  {Slope, "Slope"},
-  {Slope | Down, "Slope | Down"},
-  {Slope | Down | Ceil, "Slope | Down | Ceil"},
-  {Slope | Ceil, "Slope | Ceil"},
-  {Slope | Half, "Slope | Half"},
-  {Slope | Half | Tall, "Slope | Half | Tall"},
-  {Slope | Half | Tall | Down, "Slope | Half | Tall | Down"},
-  {Slope | Half | Down, "Slope | Half | Down"},
-  {Slope | Half | Ceil, "Slope | Half | Ceil"},
-  {Slope | Half | Ceil | Tall, "Slope | Half | Ceil | Tall"},
-  {Slope | Half | Ceil | Tall | Down, "Slope | Half | Ceil | Tall | Down"},
-  {Slope | Half | Ceil | Down, "Slope | Half | Ceil | Down"},
-  {Half, "Half"},
-  {Half | Ceil, "Half | Ceil"},
+  Empty   = 0x00,
+  Slope   = 0x01,
+  Down    = 0x03,
+  Ceil    = 0x04,
+  Half    = 0x08,
+  Tall    = 0x11,
+  Solid   = 0x20,
+  OneWay  = 0x40,
 };
 
 const static std::unordered_map<uint8_t, std::list<Point>> geometry = {
@@ -872,11 +845,30 @@ const static std::unordered_map<uint8_t, std::list<Point>> geometry = {
   {Slope | Half | Ceil | Down, {{0, 0}, {16, 0}, {16, 8}}},
   {Half, {{0, 8}, {16, 8}, {16, 16}, {0, 16}}},
   {Half | Ceil, {{0, 0}, {16, 0}, {16, 8}, {0, 8}}},
+  {(OneWay | Solid) + 0, {{0, 0}, {16, 0}}},
+  {(OneWay | Solid) + 1, {{16, 0}, {16, 16}}},
+  {(OneWay | Solid) + 2, {{16, 16}, {0, 16}}},
+  {(OneWay | Solid) + 3, {{0, 16}, {0, 0}}},
+  {OneWay | Slope, {{0, 16}, {16, 0}}},
+  {OneWay | Slope | Down, {{0, 0}, {16, 16}}},
+  {OneWay | Slope | Down | Ceil, {{16, 16}, {0, 0}}},
+  {OneWay | Slope | Ceil, {{16, 0}, {0, 16}}},
+  {OneWay | Slope | Half, {{0, 16}, {16, 8}}},
+  {OneWay | Slope | Half | Tall, {{0, 8}, {16, 0}}},
+  {OneWay | Slope | Half | Tall | Down, {{0, 0}, {16, 8}}},
+  {OneWay | Slope | Half | Down, {{0, 8}, {16, 16}}},
+  {OneWay | Slope | Half | Ceil, {{16, 0}, {0, 8}}},
+  {OneWay | Slope | Half | Ceil | Tall, {{16, 8}, {0, 16}}},
+  {OneWay | Slope | Half | Ceil | Tall | Down, {{16, 16}, {0, 8}}},
+  {OneWay | Slope | Half | Ceil | Down, {{16, 8}, {0, 0}}},
+  {OneWay | Half, {{0, 8}, {16, 8}}},
+  {OneWay | Half | Ceil, {{16, 8}, {0, 8}}},
 };
 
-static std::list<Point>::iterator next_wrap(
-  std::list<Point>& in,
-  std::list<Point>::iterator it
+template<typename T>
+static typename T::iterator next_wrap(
+  T& in,
+  typename T::iterator it
 ) {
   auto next = std::next(it);
   if (next == in.end()) {
@@ -894,6 +886,43 @@ static float slope(
     return std::numeric_limits<float>::infinity();
   }
   return (b.y - a.y) / x;
+}
+
+static void merge_lines(
+  std::list<Boundary<std::list>>& boundaries
+) {
+  // Join connected tiles.
+ loop_lines:
+  for (auto a = boundaries.begin(); a != boundaries.end(); a++) {
+    for (auto b = boundaries.begin(); b != boundaries.end(); b++) {
+      if (a == b) {
+        continue;
+      }
+      auto ap = std::prev(a->end());
+      auto bp = b->begin();
+      if (ap->x == bp->x && ap->y == bp->y) {
+        a->insert(std::next(ap), std::next(bp), b->end());
+        boundaries.erase(b);
+        goto loop_lines;
+      }
+    }
+  }
+  // Simplify geometry.
+  for (auto a = boundaries.begin(); a != boundaries.end(); a++) {
+  loop_geometry:
+    auto ap1 = a->begin();
+    auto ap2 = std::next(ap1);
+    auto ap3 = std::next(ap2);
+    while (ap2 != a->end()) {
+      if (slope(*ap1, *ap2) == slope(*ap2, *ap3)) {
+        a->erase(ap2);
+        goto loop_geometry;
+      }
+      ap1++;
+      ap2++;
+      ap3++;
+    }
+  }
 }
 
 static void merge(
@@ -914,8 +943,9 @@ static void merge(
 }
 
 static void merge_bounds(
-  std::list<std::list<Point>>& boundaries
+  std::list<Boundary<std::list>>& boundaries
 ) {
+  // Join connected tiles.
  loop_tiles:
   for (auto a = boundaries.begin(); a != boundaries.end(); a++) {
     for (auto b = boundaries.begin(); b != boundaries.end(); b++) {
@@ -1075,7 +1105,7 @@ static void merge_bounds(
       while (ap3 != a->end()) {
         if (ap1->x == ap4->x && ap1->y == ap4->y
             && ap2->x == ap3->x && ap2->y == ap3->y) {
-          std::list<Point> new_boundary;
+          Boundary<std::list> new_boundary;
           new_boundary.insert(new_boundary.end(), ap1, ap4);
           a->erase(ap2, ap3);
           boundaries.push_back(new_boundary);
@@ -1115,10 +1145,9 @@ static void merge_bounds(
   }
 }
 
-static std::list<std::list<Point>> points_from_bounds(
+static std::list<Boundary<std::list>> points_from_bounds(
   std::vector<Map>& maps,
-  std::vector<Layer>& bounds,
-  bool require_concave
+  std::vector<Layer>& bounds
 ) {
   // Determine dimensions of the world.
   int32_t world_x, world_y;
@@ -1142,9 +1171,9 @@ static std::list<std::list<Point>> points_from_bounds(
   world_w -= world_x;
   world_h -= world_y;
   // Create boundary around maps.
-  std::list<std::list<Point>> boundaries;
+  std::list<Boundary<std::list>> boundaries;
   for (const auto& map : maps) {
-    std::list<Point> boundary;
+    Boundary<std::list> boundary;
     boundary.push_back({
       .x = (map.x) << 4,
       .y = (map.y) << 4,
@@ -1170,12 +1199,14 @@ static std::list<std::list<Point>> points_from_bounds(
     for (int y = 0; y < map.h; y++) {
       for (int x = 0; x < map.w; x++) {
         auto tile = bounds[i].tiles[x + y * map.w];
-        if (tile) {
-          auto points = geometry.at(tile - 1);
-          if (points.size()) {
-            for (auto& point : points) {
+        if (tile && !((tile - 1) & BoundsTile::OneWay)) {
+          auto geo = geometry.at(tile - 1);
+          if (geo.size()) {
+            Boundary<std::list> points;
+            for (auto& point : geo) {
               point.x += (map.x + x) << 4;
               point.y += (map.y + y) << 4;
+              points.push_back(point);
             }
             boundaries.push_back(points);
           }
@@ -1185,7 +1216,6 @@ static std::list<std::list<Point>> points_from_bounds(
   }
   merge_bounds(boundaries);
   // Remove the outer boundary.
-  bool removed_outer_boundary = false;
   for (auto a = boundaries.begin(); a != boundaries.end(); a++) {
     if (a->size() == 4) {
       auto ap1 = a->begin();
@@ -1201,11 +1231,45 @@ static std::list<std::list<Point>> points_from_bounds(
           && ap4->x == ((world_x - 1) << 4)
           && ap4->y == ((world_h + world_y) << 4)) {
         boundaries.erase(a);
-        removed_outer_boundary = true;
         break;
       }
     }
   }
+  // Close boundaries.
+  for (auto a = boundaries.begin(); a != boundaries.end(); a++) {
+    a->push_back(*a->begin());
+  }
+  // One-way boundaries don't connect to the normal map geometry.
+  // Collect boundary lines for each one-way tile.
+  std::list<Boundary<std::list>> one_way_boundaries;
+  for (int i = 0; i < maps.size(); i++) {
+    const auto& map = maps[i];
+    for (int y = 0; y < map.h; y++) {
+      for (int x = 0; x < map.w; x++) {
+        auto tile = bounds[i].tiles[x + y * map.w];
+        if (tile && (tile - 1) & BoundsTile::OneWay) {
+          auto geo = geometry.at(tile - 1);
+          if (geo.size()) {
+            Boundary<std::list> points;
+            points.flags = BoundsTile::OneWay;
+            for (auto& point : geo) {
+              point.x += (map.x + x) << 4;
+              point.y += (map.y + y) << 4;
+              points.push_back(point);
+            }
+            one_way_boundaries.push_back(points);
+          }
+        }
+      }
+    }
+  }
+  merge_lines(one_way_boundaries);
+  // Append one-way boundaries to tile boundaries.
+  std::copy(
+    one_way_boundaries.begin(),
+    one_way_boundaries.end(),
+    std::back_inserter(boundaries)
+  );
   return boundaries;
 }
 
@@ -1516,8 +1580,7 @@ int main(int argc, const char* argv[]) {
     });
   }
   // Build boundary data.
-  bool require_concave = getenv("NO_REQUIRE_CONCAVE") == nullptr;
-  auto points = points_from_bounds(maps, bounds, require_concave);
+  auto points = points_from_bounds(maps, bounds);
   if (getenv("PRINT_BOUNDS") != nullptr) {
     size_t points_size1 = points.size();
     size_t count1 = 0;
