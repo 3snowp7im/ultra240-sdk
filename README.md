@@ -55,7 +55,6 @@ $ sudo make install
 ### ultra-sdk-tileset
 
 Compile a Tiled tileset file into an ULTRA240 binary.
-See the [tileset readme](src/ultra-sdk-tileset/README.md) for specification.
 
 ### ultra-sdk-img
 
@@ -70,4 +69,3 @@ Generate 16 x 16 tiled sprite sheet with every cell labeled with a tile id.
 ### ultra-sdk-world
 
 Compile a Tiled world file into an ULTRA240 binary.
-See the [world readme](src/ultra-sdk-world/README.md) for specification.
