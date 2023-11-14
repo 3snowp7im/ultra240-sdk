@@ -9,19 +9,19 @@
 * One short is the number of tiles.
 * Two shorts are the width and height of each tile in pixels.
 * One word is the offset of the image source string.
+* One word is the offset of the library name string.
 * One char is the number of tile data entries (_TDEn_) in this tileset.
 * Next _TDEn_ words are the offsets of the tile data entries.
-* One word is the offset of the library name string.
 
 ## Tile data entry format
 
 * One short is the index of the tile associated with this data.
 * One word is the name of this tile.
+* One word is the offset of the library name string.
 * One char is the number of collision box type headers (_CBTHn_) for this tile.
 * Next _CBTHn_ words are the offsets of the collision box type headers.
 * One char is the number of tiles (_ATn_) in the animation.
 * Next 6 * _ATn_ bytes are the animation tiles.
-* One word is the offset of the library name string.
 
 ## Collision box type header format
 

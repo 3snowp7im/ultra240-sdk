@@ -234,6 +234,10 @@ namespace ultra::sdk {
       *source_offset_entry = reinterpret_cast<uint32_t*>(p);
     }
     p += sizeof(uint32_t);
+    if (library_offset_entry != nullptr) {
+      *library_offset_entry = reinterpret_cast<uint32_t*>(p);
+    }
+    p += sizeof(uint32_t);
     uint8_t* tile_data_count = p;
     p += sizeof(uint8_t);
     for (int i = 0; i < tileset.tiles.size(); i++) {
@@ -242,10 +246,6 @@ namespace ultra::sdk {
       }
       p += sizeof(uint32_t);
     }
-    if (library_offset_entry != nullptr) {
-      *library_offset_entry = reinterpret_cast<uint32_t*>(p);
-    }
-    p += sizeof(uint32_t);
     if (buf != nullptr) {
       *tile_count = tileset.tile_count;
       *w = tileset.tile_w;
@@ -275,6 +275,10 @@ namespace ultra::sdk {
     p += sizeof(uint16_t);
     uint32_t* name = reinterpret_cast<uint32_t*>(p);
     p += sizeof(uint32_t);
+    if (library_offset_entry != nullptr) {
+      *library_offset_entry = reinterpret_cast<uint32_t*>(p);
+    }
+    p += sizeof(uint32_t);
     uint16_t* collision_box_types_count = reinterpret_cast<uint16_t*>(p);
     p += sizeof(uint16_t);
     for (int i = 0; i < tile.collision_boxes.size(); i++) {
@@ -296,10 +300,6 @@ namespace ultra::sdk {
       p += sizeof(uint16_t);
       animation_tiles.push(ptrs);
     }
-    if (library_offset_entry != nullptr) {
-      *library_offset_entry = reinterpret_cast<uint32_t*>(p);
-    }
-    p += sizeof(uint32_t);
     if (buf != nullptr) {
       *tile_id = id;
       *name = tile.name;
