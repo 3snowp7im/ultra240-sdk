@@ -238,7 +238,7 @@ namespace ultra::sdk {
       *library_offset_entry = reinterpret_cast<uint32_t*>(p);
     }
     p += sizeof(uint32_t);
-    uint16_t* tile_data_count = p;
+    uint16_t* tile_data_count = reinterpret_cast<uint16_t*>(p);
     p += sizeof(uint16_t);
     for (int i = 0; i < tileset.tiles.size(); i++) {
       if (tile_offset_entries != nullptr) {
