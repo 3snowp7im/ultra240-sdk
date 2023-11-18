@@ -6,6 +6,7 @@ AC_CHECK_HEADER([png++/png.hpp], [], [AC_MSG_ERROR([Missing libpng++])])
 AC_CHECK_HEADER([rapidxml/rapidxml.hpp], [], [AC_MSG_ERROR([Missing rapidxml])])
 AC_LANG_POP([C++])
 AM_INIT_AUTOMAKE
+AC_CONFIG_MACRO_DIRS([m4])
 AC_CONFIG_FILES([
   Makefile
   src/ultra-sdk/Makefile
@@ -17,5 +18,5 @@ AC_CONFIG_FILES([
   ultra240-sdk.pc
 ])
 AC_PROG_CXX
-AC_PROG_RANLIB
+LT_INIT
 AC_OUTPUT

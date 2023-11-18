@@ -1,3 +1,5 @@
+ACLOCAL_AMFLAGS = -Im4
+
 SUBDIRS = \
 	src/ultra-sdk \
 	src/ultra-sdk-posix \
