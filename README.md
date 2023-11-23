@@ -15,7 +15,7 @@ To install the build dependencies on Ubuntu:
 
 ```shell
 $ sudo apt-get install build-essential libjsoncpp-dev libpng++-dev \
-  librapidxml-dev
+  librapidxml-dev libyaml-cpp-dev
 ```
 
 ### Building a non-release version

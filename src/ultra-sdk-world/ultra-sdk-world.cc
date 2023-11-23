@@ -1,6 +1,4 @@
-/**
- * Compile a world file into an ULTRA240 binary.
- */
+/** Compile a world file into an ULTRA240 binary. */
 #include <algorithm>
 #include <cmath>
 #include <fstream>
@@ -19,6 +17,7 @@
 #include <stdexcept>
 #include <unordered_map>
 #include <vector>
+#include <yaml-cpp/yaml.h>
 
 #define FLIP_X 0x80000000
 #define FLIP_Y 0x40000000
@@ -47,12 +46,14 @@ struct Entity {
   uint16_t x, y;
   uint16_t w, h;
   uint16_t tile;
+  std::string type;
   uint32_t state;
 };
 
 struct Map {
   int16_t x, y;
   uint16_t w, h;
+  std::vector<uint32_t> properties;
   uint8_t entities_index;
   std::vector<Tileset> map_tilesets;
   std::vector<Tileset> entity_tilesets;
@@ -149,8 +150,40 @@ static void write_layer(
   }
 }
 
+static uint16_t get_entity_type(const Entity& entity, YAML::Node& config) {
+  if (!config["entity_types"].IsDefined()) {
+    return 0;
+  }
+  if (!entity.type.size()) {
+    return 0;
+  }
+  for (size_t i = 0; i < config["entity_types"].size(); i++) {
+    if (entity.type == config["entity_types"][i].as<std::string>()) {
+      return i + 1;
+    }
+  }
+  return 0;
+}
+
+static bool is_indexed_entity(const Entity& entity, YAML::Node& config) {
+  if (!config["indexed_entity_types"].IsDefined()) {
+    return false;
+  }
+  if (!entity.type.size()) {
+    return false;
+  }
+  for (size_t i = 0; i < config["indexed_entity_types"].size(); i++) {
+    if (entity.type == config["indexed_entity_types"][i].as<std::string>()) {
+      return true;
+    }
+  }
+  return false;
+}
+
 static void write_entity(
   const Entity& entity,
+  YAML::Node& config,
+  uint16_t& entity_id,
   uint8_t* buf,
   size_t* buf_size
 ) {
@@ -161,12 +194,22 @@ static void write_entity(
   p += sizeof(uint16_t);
   uint16_t* tile = reinterpret_cast<uint16_t*>(p);
   p += sizeof(uint16_t);
+  uint16_t* type = reinterpret_cast<uint16_t*>(p);
+  p += sizeof(uint16_t);
+  uint16_t* id = reinterpret_cast<uint16_t*>(p);
+  p += sizeof(uint16_t);
   uint32_t* state = reinterpret_cast<uint32_t*>(p);
   p += sizeof(uint32_t);
   if (buf != nullptr) {
     *x = entity.x;
     *y = entity.y;
     *tile = entity.tile;
+    *type = get_entity_type(entity, config);
+    if (is_indexed_entity(entity, config)) {
+      *id = entity_id++;
+    } else {
+      *id = 0;
+    }
     *state = entity.state;
   }
   if (buf_size != nullptr) {
@@ -176,6 +219,8 @@ static void write_entity(
 
 static void write_map(
   const Map& map,
+  YAML::Node& config,
+  uint16_t& entity_id,
   uint32_t offset,
   uint8_t* buf,
   size_t* buf_size
@@ -211,6 +256,14 @@ static void write_map(
   p += sizeof(uint16_t);
   uint16_t* h = reinterpret_cast<uint16_t*>(p);
   p += sizeof(uint16_t);
+  // Properties.
+  uint8_t* properties_count = p;
+  p += sizeof(uint8_t);
+  std::vector<uint32_t*> properties(map.properties.size());
+  for (int i = 0; i < map.properties.size(); i++) {
+    properties[i] = reinterpret_cast<uint32_t*>(p);
+    p += sizeof(uint32_t);
+  }
   // Map tileset count.
   uint8_t* MTSn = p;
   p += sizeof(uint8_t);
@@ -245,7 +298,7 @@ static void write_map(
   p += sizeof(uint16_t);
   for (const auto& entity : map.entities) {
     size_t entity_size;
-    write_entity(entity, buf ? p : nullptr, &entity_size);
+    write_entity(entity, config, entity_id, buf ? p : nullptr, &entity_size);
     p += entity_size;
   }
   // Sort entities by x and y.
@@ -477,6 +530,11 @@ static void write_map(
     // Dimensions.
     *w = map.w;
     *h = map.h;
+    // Properties.
+    *properties_count = map.properties.size() / 2;
+    for (int i = 0; i < map.properties.size(); i++) {
+      *properties[i] = map.properties[i];
+    }
     // Map tileset count.
     *MTSn = map.map_tilesets.size();
     // Entity tileset count.
@@ -761,6 +819,7 @@ static void write_boundary(
 static void write_world(
   const std::vector<Map>& maps,
   const std::list<Boundary<std::list>>& bounds,
+  YAML::Node& config,
   uint8_t* buf,
   size_t* buf_size
 ) {
@@ -780,11 +839,14 @@ static void write_world(
     p += sizeof(uint32_t);
   }
   std::queue<uint32_t> map_header_offsets;
+  uint16_t entity_id = 1;
   for (const auto& map : maps) {
     map_header_offsets.push(static_cast<uint32_t>(p - buf));
     size_t map_header_size;
     write_map(
       map,
+      config,
+      entity_id,
       static_cast<uint32_t>(p - buf),
       buf ? p : nullptr,
       &map_header_size
@@ -1274,7 +1336,8 @@ static std::list<Boundary<std::list>> points_from_bounds(
 }
 
 static void print_usage(const char* self, std::ostream& out) {
-  out << "Usage: " << self << " [-h] <in.world> <out.bin>" << std::endl;
+  out << "Usage: " << self << " [-h] [-c <config.yaml>] <in.world> <out.bin>"
+      << std::endl;
 }
 
 int main(int argc, const char* argv[]) {
@@ -1286,17 +1349,31 @@ int main(int argc, const char* argv[]) {
       return 0;
     }
   }
-  if (argc != 3) {
+  if (argc != 3 && argc != 5) {
     print_usage(argv[0], std::cerr);
     return 1;
   }
-  std::string path(argv[1]);
+  // Check for entity configuration file.
+  YAML::Node config;
+  int json_arg_idx = 1;
+  int out_arg_idx = 2;
+  if (argc == 5) {
+    json_arg_idx = 3;
+    out_arg_idx = 4;
+    std::string arg(argv[1]);
+    if (arg == "-c") {
+      config = YAML::LoadFile(argv[2]);
+    } else {print_usage(argv[0], std::cerr);
+      return 1;
+    }
+  }
+  std::string path(argv[json_arg_idx]);
   auto prefix = path.substr(0, path.rfind("/"));
   if (prefix == path) {
     prefix = ".";
   }
   prefix += "/";
-  auto world = load_json(argv[1]);
+  auto world = load_json(argv[json_arg_idx]);
   // Parse maps.
   std::vector<Map> maps;
   std::vector<Layer> bounds;
@@ -1317,6 +1394,7 @@ int main(int argc, const char* argv[]) {
         h = static_cast<uint16_t>(std::atoi(attr->value()));
       }
     }
+    std::vector<uint32_t> properties;
     std::vector<Layer> layers;
     std::vector<Tileset> tilesets;
     std::vector<Entity> entities;
@@ -1330,7 +1408,45 @@ int main(int argc, const char* argv[]) {
          map_node != nullptr;
          map_node = map_node->next_sibling()) {
       std::string node_name(map_node->name());
-      if (node_name == "tileset") {
+      if (node_name == "properties") {
+        for (auto properties_node = map_node->first_node();
+             properties_node != nullptr;
+             properties_node = properties_node->next_sibling()) {
+          std::string node_name(properties_node->name());
+          if (node_name == "property") {
+            std::uint32_t name;
+            std::string type = "string";
+            std::string value;
+            for (auto attr = properties_node->first_attribute();
+                 attr != nullptr;
+                 attr = attr->next_attribute()) {
+              std::string attr_name(attr->name());
+              std::string attr_value(attr->value());
+              if (attr_name == "name") {
+                name = ultra::sdk::util::crc32(attr_value.c_str());
+              } else if (attr_name == "type") {
+                type = attr_value;
+              } else if (attr_name == "value") {
+                value = attr_value;
+              }
+            }
+            uint32_t int_value;
+            if (type == "int") {
+              int_value = static_cast<uint16_t>(std::atoi(value.c_str()));
+            } else if (type == "bool") {
+              if (value == "true") {
+                int_value = 1;
+              } else {
+                int_value = 0;
+              }
+            } else if (type == "string") {
+              int_value = ultra::sdk::util::crc32(value.c_str());
+            }
+            properties.push_back(name);
+            properties.push_back(int_value);
+          }
+        }
+      } else if (node_name == "tileset") {
         Tileset tileset = {
           .map_index = -1,
           .entity_index = -1,
@@ -1506,7 +1622,7 @@ int main(int argc, const char* argv[]) {
                   if (node_name == "property") {
                     // Parse attributes for gid and position.
                     std::string name;
-                    std::string type;
+                    std::string type = "string";
                     std::string value;
                     for (auto attr = properties_node->first_attribute();
                          attr != nullptr;
@@ -1526,11 +1642,19 @@ int main(int argc, const char* argv[]) {
                         ent.state = ultra::sdk::util::crc32(value.c_str());
                       } else if (type == "int") {
                         ent.state = std::atoi(value.c_str());
+                      } else if (type == "bool") {
+                        if (value == "true") {
+                          ent.state = 1;
+                        } else {
+                          ent.state = 0;
+                        }
                       } else {
                         throw std::runtime_error(
                           "Entity state not type string or int"
                         );
                       }
+                    } else if (name == "type") {
+                      ent.type = value;
                     }
                   }
                 }
@@ -1572,6 +1696,7 @@ int main(int argc, const char* argv[]) {
       .y = static_cast<int16_t>(world["maps"][i]["y"].asInt() / 16),
       .w = w,
       .h = h,
+      .properties = properties,
       .entities_index = static_cast<uint8_t>(entities_layer_index),
       .map_tilesets = map_tilesets,
       .entity_tilesets = entity_tilesets,
@@ -1608,11 +1733,11 @@ int main(int argc, const char* argv[]) {
   }
   // Build binary data.
   size_t buf_size;
-  write_world(maps, points, nullptr, &buf_size);
+  write_world(maps, points, config, nullptr, &buf_size);
   uint8_t buf[buf_size];
-  write_world(maps, points, buf, nullptr);
+  write_world(maps, points, config, buf, nullptr);
   // Write the binary data.
-  std::ofstream out(argv[2]);
+  std::ofstream out(argv[out_arg_idx]);
   if (!out.is_open()) {
     throw std::runtime_error("Could not open output file");
   }
