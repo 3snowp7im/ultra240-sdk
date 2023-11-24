@@ -32,6 +32,7 @@ struct Tileset {
 typedef std::tuple<uint8_t, uint8_t> fraction_t;
 
 struct Layer {
+  uint32_t name;
   enum Type {
     Image,
     Bounds,
@@ -43,6 +44,7 @@ struct Layer {
 };
 
 struct Entity {
+  uint32_t layer_name;
   uint16_t x, y;
   uint16_t w, h;
   uint16_t tile;
@@ -126,6 +128,8 @@ static void write_layer(
   size_t* buf_size
 ) {
   uint8_t* p = buf;
+  uint32_t* name = reinterpret_cast<uint32_t*>(p);
+  p += sizeof(uint32_t);
   uint8_t* pxn = p;
   p += sizeof(uint8_t);
   uint8_t* pxd = p;
@@ -137,6 +141,7 @@ static void write_layer(
   uint16_t* tiles = reinterpret_cast<uint16_t*>(p);
   p += w * h * sizeof(uint16_t);
   if (buf != nullptr) {
+    *name = layer.name;
     *pxn = std::get<0>(layer.parallax.x);
     *pxd = std::get<1>(layer.parallax.x);
     *pyn = std::get<0>(layer.parallax.y);
@@ -188,6 +193,8 @@ static void write_entity(
   size_t* buf_size
 ) {
   uint8_t* p = buf;
+  uint32_t* layer_name = reinterpret_cast<uint32_t*>(p);
+  p += sizeof(uint32_t);
   uint16_t* x = reinterpret_cast<uint16_t*>(p);
   p += sizeof(uint16_t);
   uint16_t* y = reinterpret_cast<uint16_t*>(p);
@@ -201,6 +208,7 @@ static void write_entity(
   uint32_t* state = reinterpret_cast<uint32_t*>(p);
   p += sizeof(uint32_t);
   if (buf != nullptr) {
+    *layer_name = entity.layer_name;
     *x = entity.x;
     *y = entity.y;
     *tile = entity.tile;
@@ -290,9 +298,6 @@ static void write_map(
     layer_offset_entries.push(reinterpret_cast<uint32_t*>(p));
     p += sizeof(uint32_t);
   }
-  // Entities layer index.
-  uint8_t* entities_index = p;
-  p += sizeof(uint8_t);
   // Entity offsets.
   uint16_t* En = reinterpret_cast<uint16_t*>(p);
   p += sizeof(uint16_t);
@@ -541,8 +546,6 @@ static void write_map(
     *ETSn = map.entity_tilesets.size();
     // Layer count.
     *Ln = map.layers.size();
-    // Entity layer index.
-    *entities_index = map.entities_index;
     // Entity count.
     *En = map.entities.size();
     // Sorted entity indexes.
@@ -1403,7 +1406,6 @@ int main(int argc, const char* argv[]) {
     size_t entity_tileset_index = 0;
     int entities_layer_index = -1;
     uint8_t layer_index = 0;
-    uint8_t bounds_layer_index = 0;
     for (auto map_node = map_doc.first_node()->first_node();
          map_node != nullptr;
          map_node = map_node->next_sibling()) {
@@ -1481,7 +1483,9 @@ int main(int argc, const char* argv[]) {
              attr != nullptr;
              attr = attr->next_attribute()) {
           std::string attr_name(attr->name());
-          if (attr_name == "parallaxx") {
+          if (attr_name == "name") {
+            layer.name = ultra::sdk::util::crc32(attr->value());
+          } else if (attr_name == "parallaxx") {
             layer.parallax.x = double_to_fraction(std::atof(attr->value()));
           } else if (attr_name == "parallaxy") {
             layer.parallax.y = double_to_fraction(std::atof(attr->value()));
@@ -1518,7 +1522,6 @@ int main(int argc, const char* argv[]) {
                         );
                       }
                       layer.type = Layer::Type::Bounds;
-                      bounds_layer_index = layer_index;
                       index = 0;
                     } else {
                       if (layer.type == Layer::Type::Bounds) {
@@ -1556,13 +1559,25 @@ int main(int argc, const char* argv[]) {
         }
         layer_index++;
       } else if (node_name == "objectgroup") {
+        uint32_t layer_name;
+        for (auto attr = map_node->first_attribute();
+             attr != nullptr;
+             attr = attr->next_attribute()) {
+          std::string attr_name(attr->name());
+          if (attr_name == "name") {
+            layer_name = ultra::sdk::util::crc32(attr->value());
+          }
+        }
         // Parse nodes for entities.
         for (auto objectgroup_node = map_node->first_node();
              objectgroup_node != nullptr;
              objectgroup_node = objectgroup_node->next_sibling()) {
           std::string node_name(objectgroup_node->name());
           if (node_name == "object") {
-            Entity ent = {.state = 0};
+            Entity ent = {
+              .layer_name = layer_name,
+              .state = 0,
+            };
             // Parse attributes for gid and position.
             for (auto attr = objectgroup_node->first_attribute();
                  attr != nullptr;
@@ -1663,7 +1678,6 @@ int main(int argc, const char* argv[]) {
             entities.push_back(ent);
           }
         }
-        entities_layer_index = layer_index;
       }
     }
     // Sort the tilesets by index.
@@ -1686,9 +1700,6 @@ int main(int argc, const char* argv[]) {
     });
     while (entity_tilesets.size() && entity_tilesets[0].entity_index == -1) {
       entity_tilesets.erase(entity_tilesets.begin());
-    }
-    if (entities_layer_index == -1) {
-      entities_layer_index = bounds_layer_index + 2;
     }
     // Add map struct to collection.
     maps.push_back({
