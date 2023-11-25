@@ -188,7 +188,7 @@ static bool is_indexed_entity(const Entity& entity, YAML::Node& config) {
 static void write_entity(
   const Entity& entity,
   YAML::Node& config,
-  uint16_t& entity_id,
+  std::unordered_map<uint16_t, uint16_t>& type_ids,
   uint8_t* buf,
   size_t* buf_size
 ) {
@@ -214,7 +214,8 @@ static void write_entity(
     *tile = entity.tile;
     *type = get_entity_type(entity, config);
     if (is_indexed_entity(entity, config)) {
-      *id = entity_id++;
+      type_ids.emplace(*type, 1);
+      *id = type_ids[*type]++;
     } else {
       *id = 0;
     }
@@ -228,7 +229,7 @@ static void write_entity(
 static void write_map(
   const Map& map,
   YAML::Node& config,
-  uint16_t& entity_id,
+  std::unordered_map<uint16_t, uint16_t>& type_ids,
   uint32_t offset,
   uint8_t* buf,
   size_t* buf_size
@@ -303,7 +304,7 @@ static void write_map(
   p += sizeof(uint16_t);
   for (const auto& entity : map.entities) {
     size_t entity_size;
-    write_entity(entity, config, entity_id, buf ? p : nullptr, &entity_size);
+    write_entity(entity, config, type_ids, buf ? p : nullptr, &entity_size);
     p += entity_size;
   }
   // Sort entities by x and y.
@@ -842,14 +843,14 @@ static void write_world(
     p += sizeof(uint32_t);
   }
   std::queue<uint32_t> map_header_offsets;
-  uint16_t entity_id = 1;
+  std::unordered_map<uint16_t, uint16_t> type_ids;
   for (const auto& map : maps) {
     map_header_offsets.push(static_cast<uint32_t>(p - buf));
     size_t map_header_size;
     write_map(
       map,
       config,
-      entity_id,
+      type_ids,
       static_cast<uint32_t>(p - buf),
       buf ? p : nullptr,
       &map_header_size
