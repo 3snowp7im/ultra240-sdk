@@ -233,8 +233,8 @@ int main(int argc, char* argv[]) {
       separator[i] = black;
     }
     for (int i = 0; i < cols; i++) {
-      separator[1 + width / 2 - 1 + i * width] = red;
-      separator[1 + width / 2 + 0 + i * width] = red;
+      separator[1 + width / 2 - 1 + i * (1 + width)] = red;
+      separator[1 + width / 2 + 0 + i * (1 + width)] = red;
     }
   }
   // Draw checkerboard.
@@ -244,8 +244,8 @@ int main(int argc, char* argv[]) {
   }
   for (int i = 0; i < cols; i++) {
     if (spacing) {
-      even_row[i * (spacing + width)] = black;
-      odd_row[i * (spacing + width)] = black;
+      even_row[i * (1 + width)] = black;
+      odd_row[i * (1 + width)] = black;
     }
     if (bg) {
       for (int j = 0; j < width; j++) {
@@ -264,7 +264,7 @@ int main(int argc, char* argv[]) {
   }
   for (int i = 0; i < rows; i++) {
     if (spacing) {
-      img[i * (spacing + height)] = separator;
+      img[i * (1 + height)] = separator;
     }
     for (int j = 0; j < height; j++) {
       if (i % 2) {
