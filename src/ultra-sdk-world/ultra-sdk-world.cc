@@ -1340,7 +1340,7 @@ static std::list<Boundary<std::list>> points_from_bounds(
 }
 
 static void print_usage(const char* self, std::ostream& out) {
-  out << "Usage: " << self << " [-h] [-c <config.yaml>] <in.world> <out.bin>"
+  out << "Usage: " << self << " [-h] [-c config.yaml] <in.world> <out.bin>"
       << std::endl;
 }
 
