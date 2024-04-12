@@ -1,5 +1,3 @@
-SUBDIRS = ../ultra-sdk ../ultra-sdk-posix
-
 bin_PROGRAMS = ultra-sdk-world
 ultra_sdk_world_SOURCES = ultra-sdk-world.cc
 ultra_sdk_world_CXXFLAGS = $(JSON_CFLAGS) -I$(srcdir)/../../include

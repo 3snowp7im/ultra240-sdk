@@ -1,5 +1,3 @@
-SUBDIRS = ../ultra-sdk ../ultra-sdk-posix
-
 bin_PROGRAMS = ultra-sdk-tileset
 ultra_sdk_tileset_SOURCES = ultra-sdk-tileset.cc
 ultra_sdk_tileset_CXXFLAGS = -I$(srcdir)/../../include
